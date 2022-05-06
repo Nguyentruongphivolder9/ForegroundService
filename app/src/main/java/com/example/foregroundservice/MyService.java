@@ -7,6 +7,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.media.MediaPlayer;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -29,11 +30,13 @@ public class MyService extends Service {
     private boolean isPlaying = false;
     private MediaPlayer mediaPlayer;
 
-    private int PLAY_MUSIC_CODE = 0;
+    private int RESUME_MUSIC_CODE = 0;
     private int PAUSE_MUSIC_CODE = 1;
+    private OnListenDuration onListenDuration;
 
     private final class  ServiceHandler extends Handler {
         private MediaPlayer mediaPlayer;
+        private int currentTime;
 
         public ServiceHandler(Looper looper) {
             super(looper);
@@ -41,13 +44,39 @@ public class MyService extends Service {
 
         @Override
         public void handleMessage(Message msg) {
+            Bundle bundle = msg.getData();
+
             switch (msg.what){
-                case 0 : {
-                    Bundle bundle = msg.getData();
+                case -1 :
                     int resourceMusic = bundle.getInt("mp3");
-                    int id = bundle.getInt("id");
                     startMp3(resourceMusic);
-                }
+                    break;
+                case 0 :
+                    resumeMp3();
+                    break;
+                case 1 :
+                    pauseMp3();
+                    break;
+
+            }
+        }
+
+        private void pauseMp3() {
+            if (mediaPlayer != null){
+                mediaPlayer.pause();
+                currentTime = mediaPlayer.getCurrentPosition();
+                isPlaying = false;
+                notificationManager.notify(1,makenotification("Music 1","Hoài Lâm",isPlaying));
+            }
+        }
+
+        private void resumeMp3() {
+            if (mediaPlayer != null && mediaPlayer.isPlaying()){
+                mediaPlayer.seekTo(currentTime);
+                mediaPlayer.start();
+                isPlaying = true;
+                notificationManager.notify(1,makenotification("Music 1","Hoài Lâm",isPlaying));
+
             }
         }
 
@@ -67,10 +96,16 @@ public class MyService extends Service {
         }
     }
 
+    private class MyBound extends Binder {
+        MyService getService(){
+            return  MyService.this;
+        }
+    }
+
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return new MyBound();
     }
 
     @Override
@@ -84,22 +119,32 @@ public class MyService extends Service {
             notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
             // Start foreground
-        notification = makenotification("Music 1","Hoài Lâm",isPlaying);
-        startForeground(1,notification);
+        startForeground(1, makenotification("Music 1","Hoài Lâm",isPlaying));
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null)
-        if (isPlaying){
-            Message msg = serviceHandler.obtainMessage();
-            Bundle bundle = new Bundle();
-            bundle.putInt("mp3",R.raw.rat_buon_hoai_lam);
-            bundle.putInt("id",startId);
-            msg.what = 1;
-            serviceHandler.sendMessage(msg);
+        int requestCode = intent.getIntExtra("requestCode",-1);
+        Message msg = serviceHandler.obtainMessage();
+        Bundle bundle = new Bundle();
+
+        switch (requestCode) {
+            case -1:
+                bundle.putInt("mp3", R.raw.rat_buon_hoai_lam);
+                msg.what = -1;
+                msg.setData(bundle);
+                serviceHandler.sendMessage(msg);
+                break;
+            case 0 :
+                msg.what = 0;
+                serviceHandler.sendMessage(msg);
+                break;
+            case 1 :
+                msg.what = 1;
+                serviceHandler.sendMessage(msg);
+                break;
         }
-        return START_REDELIVER_INTENT;
+        return START_NOT_STICKY;
     }
 
 
@@ -109,34 +154,37 @@ public class MyService extends Service {
     }
 
     public Notification makenotification(String title, String singer, boolean isPlaying) {
-        Intent intentPlayMisic = new Intent(this, MyService.class);
-        intentPlayMisic.putExtra("status",0);
+        Intent intentResumeMisic = new Intent(this, MyService.class);
+        intentResumeMisic.putExtra("requestCode", isPlaying ? PAUSE_MUSIC_CODE : RESUME_MUSIC_CODE);
 
-        PendingIntent pendingIntentPlayMusic = PendingIntent.getService(
+        PendingIntent pendingIntent = PendingIntent.getService(
                 this,
-                PLAY_MUSIC_CODE,
-                intentPlayMisic,
-                PendingIntent.FLAG_UPDATE_CURRENT
+                0,
+                intentResumeMisic,
+                PendingIntent.FLAG_MUTABLE
         );
-        Intent intentPauseMisic = new Intent(this, MyService.class);
 
-        PendingIntent pendingIntentPauseMusic = PendingIntent.getService(
-                this,
-                PLAY_MUSIC_CODE,
-                intentPlayMisic,
-                PendingIntent.FLAG_UPDATE_CURRENT
-        );
 
         NotificationCompat.Builder notification = new NotificationCompat.Builder(getApplicationContext(), "CHANNLE_ID")
                 .setSmallIcon(R.drawable.ic_launcher_background)
                 .setWhen(System.currentTimeMillis())
                 .setContentTitle(title)
-                .setContentText(singer)
-                .addAction(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
-                        isPlaying ? "Pause" : "Play",
-                        isPlaying ? pendingIntentPauseMusic : pendingIntentPlayMusic
-                );
+                .setContentText(singer);
+        if (isPlaying) {
+            notification.addAction(android.R.drawable.ic_media_pause, "Pause", pendingIntent);
+        } else {
+            notification.addAction(android.R.drawable.ic_media_play, "Play", pendingIntent);
+        }
 
         return notification.build();
     }
+
+    public void setOnListenDuration(OnListenDuration onListenDuration) {
+        this.onListenDuration = onListenDuration;
+    }
+
+    interface OnListenDuration {
+        void onCurrentDuration(long time);
+    }
+
 }
