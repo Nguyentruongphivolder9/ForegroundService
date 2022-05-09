@@ -28,6 +28,7 @@ public class MyService extends Service {
     private NotificationManager notificationManager;
     private Notification notification;
     private boolean isPlaying = false;
+    private boolean isUnBind = false;
     private MediaPlayer mediaPlayer;
 
     private int RESUME_MUSIC_CODE = 0;
@@ -37,6 +38,8 @@ public class MyService extends Service {
     private final class  ServiceHandler extends Handler {
         private MediaPlayer mediaPlayer;
         private int currentTime;
+        private Handler handler;
+        private int totalTime = 0;
 
         public ServiceHandler(Looper looper) {
             super(looper);
@@ -45,58 +48,87 @@ public class MyService extends Service {
         @Override
         public void handleMessage(Message msg) {
             Bundle bundle = msg.getData();
-
-            switch (msg.what){
-                case -1 :
+            switch (msg.what) {
+                case -1:
                     int resourceMusic = bundle.getInt("mp3");
                     startMp3(resourceMusic);
                     break;
-                case 0 :
+                case 0:
                     resumeMp3();
                     break;
-                case 1 :
+                case 1:
                     pauseMp3();
                     break;
-
+            }
+            if (!isUnBind){
+                updateCurrenTime();
             }
         }
 
-        private void pauseMp3() {
+        private void disableUpdate() {
+            if (mediaPlayer != null && mediaPlayer.isPlaying()){
+                handler.removeCallbacks(runnable);
+            }
+        }
+
+        private void updateCurrenTime(){
             if (mediaPlayer != null){
+                if (isPlaying) {
+                    handler = new Handler();
+                    handler.postDelayed(runnable,500);
+                }
+            }
+
+        }
+        private Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                if (mediaPlayer.isPlaying() && mediaPlayer.getCurrentPosition() < mediaPlayer.getDuration()){
+                    onListenDuration.onCurrentDuration(mediaPlayer.getCurrentPosition());
+                }
+                if (isPlaying){
+                    handler.postDelayed(this,500);
+                }
+            }
+        };
+
+        private void pauseMp3() {
+            if (mediaPlayer != null) {
                 mediaPlayer.pause();
                 currentTime = mediaPlayer.getCurrentPosition();
                 isPlaying = false;
-                notificationManager.notify(1,makenotification("Music 1","Hoài Lâm",isPlaying));
+                notificationManager.notify(1, makenotification("Music 1", "Hoài Lâm", isPlaying));
             }
         }
 
         private void resumeMp3() {
-            if (mediaPlayer != null && mediaPlayer.isPlaying()){
+            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
                 mediaPlayer.seekTo(currentTime);
                 mediaPlayer.start();
                 isPlaying = true;
-                notificationManager.notify(1,makenotification("Music 1","Hoài Lâm",isPlaying));
+                notificationManager.notify(1, makenotification("Music 1", "Hoài Lâm", isPlaying));
 
             }
         }
 
         private void startMp3(int resourceMusic) {
-            if (mediaPlayer != null){
+            if (mediaPlayer != null) {
                 mediaPlayer.stop();
                 mediaPlayer.release();
                 mediaPlayer = null;
             }
-            mediaPlayer = MediaPlayer.create(getApplicationContext(),resourceMusic);
+            mediaPlayer = MediaPlayer.create(getApplicationContext(), resourceMusic);
             mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
                 public void onPrepared(MediaPlayer mediaPlayer) {
                     mediaPlayer.start();
+                    isPlaying = true;
                 }
             });
         }
     }
 
-    private class MyBound extends Binder {
+    public class MyBound extends Binder {
         MyService getService(){
             return  MyService.this;
         }
@@ -106,6 +138,20 @@ public class MyService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return new MyBound();
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        isUnBind = true;
+        serviceHandler.disableUpdate();
+        return true;
+    }
+
+    @Override
+    public void onRebind(Intent intent) {
+        isUnBind = false;
+        serviceHandler.updateCurrenTime();
+        super.onRebind(intent);
     }
 
     @Override
@@ -161,7 +207,7 @@ public class MyService extends Service {
                 this,
                 0,
                 intentResumeMisic,
-                PendingIntent.FLAG_MUTABLE
+                PendingIntent.FLAG_UPDATE_CURRENT
         );
 
 
