@@ -27,9 +27,8 @@ public class MyService extends Service {
     private ServiceHandler serviceHandler;
     private NotificationManager notificationManager;
     private Notification notification;
-    private boolean isPlaying = false;
+    private boolean isPlaying = true;
     private boolean isUnBind = false;
-    private MediaPlayer mediaPlayer;
 
     private int RESUME_MUSIC_CODE = 0;
     private int PAUSE_MUSIC_CODE = 1;
@@ -37,9 +36,8 @@ public class MyService extends Service {
 
     private final class  ServiceHandler extends Handler {
         private MediaPlayer mediaPlayer;
-        private int currentTime;
+        private int currentTime = 0;
         private Handler handler;
-        private int totalTime = 0;
 
         public ServiceHandler(Looper looper) {
             super(looper);
@@ -93,20 +91,20 @@ public class MyService extends Service {
         };
 
         private void pauseMp3() {
-            if (mediaPlayer != null) {
-                mediaPlayer.pause();
+            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
                 currentTime = mediaPlayer.getCurrentPosition();
+                mediaPlayer.pause();
                 isPlaying = false;
-                notificationManager.notify(1, makenotification("Music 1", "Hoài Lâm", isPlaying));
+                notificationManager.notify(1, makenotification("Music 1", "Hoài Lâm", false));
             }
         }
 
         private void resumeMp3() {
-            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            if (mediaPlayer != null) {
                 mediaPlayer.seekTo(currentTime);
                 mediaPlayer.start();
                 isPlaying = true;
-                notificationManager.notify(1, makenotification("Music 1", "Hoài Lâm", isPlaying));
+                notificationManager.notify(1, makenotification("Music 1", "Hoài Lâm", true));
 
             }
         }
@@ -121,14 +119,15 @@ public class MyService extends Service {
             mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
                 public void onPrepared(MediaPlayer mediaPlayer) {
-                    mediaPlayer.start();
                     isPlaying = true;
+                    mediaPlayer.start();
                 }
             });
         }
     }
 
     public class MyBound extends Binder {
+
         MyService getService(){
             return  MyService.this;
         }
@@ -200,13 +199,13 @@ public class MyService extends Service {
     }
 
     public Notification makenotification(String title, String singer, boolean isPlaying) {
-        Intent intentResumeMisic = new Intent(this, MyService.class);
-        intentResumeMisic.putExtra("requestCode", isPlaying ? PAUSE_MUSIC_CODE : RESUME_MUSIC_CODE);
+        Intent intentMusic = new Intent(this, MyService.class);
+        intentMusic.putExtra("requestCode", isPlaying ? PAUSE_MUSIC_CODE : RESUME_MUSIC_CODE);
 
         PendingIntent pendingIntent = PendingIntent.getService(
                 this,
                 0,
-                intentResumeMisic,
+                intentMusic,
                 PendingIntent.FLAG_UPDATE_CURRENT
         );
 
